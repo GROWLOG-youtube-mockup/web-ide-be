@@ -23,7 +23,6 @@ import com.growlog.webide.domain.files.dto.FileOpenResponseDto;
 import com.growlog.webide.domain.files.dto.FileResponse;
 import com.growlog.webide.domain.files.dto.FileSaveRequestDto;
 import com.growlog.webide.domain.files.dto.FileSearchResponseDto;
-import com.growlog.webide.domain.files.dto.MoveFileRequest;
 import com.growlog.webide.domain.files.service.FileService;
 import com.growlog.webide.global.common.ApiResponse;
 import com.growlog.webide.global.common.exception.CustomException;
@@ -34,11 +33,13 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Tag(name = "file-system", description = "파일 시스템 관련 API 입니다.")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/projects/{projectId}/files")
+@Slf4j
 public class FileController {
 
 	private final FileService fileService;
@@ -52,31 +53,34 @@ public class FileController {
 		@AuthenticationPrincipal UserPrincipal user
 	) {
 		fileService.createFileorDirectory(projectId, request, user.getUserId());
-		return ApiResponse.ok(new FileResponse("파일이 생성되었습니다."));
+		return ApiResponse.ok(new FileResponse("File created"));
 	}
 
 	@Operation(summary = "파일/폴더 삭제", description = "파일/폴더를 삭제합니다.")
-	@DeleteMapping("/{filePath:.+}")
+	@DeleteMapping
 	@PreAuthorize("@projectSecurityService.hasWritePermission(#projectId)")
 	public ApiResponse<FileResponse> deleteFile(
 		@PathVariable Long projectId,
-		@PathVariable("filePath") String filePath,
+		@RequestParam("path") String filePath,
 		@AuthenticationPrincipal UserPrincipal user
 	) {
+		log.info("[DELETE 요청] projectId={}, filePath={}", projectId, filePath);
 		fileService.deleteFileorDirectory(projectId, filePath, user.getUserId());
-		return ApiResponse.ok(new FileResponse("삭제되었습니다."));
+		return ApiResponse.ok(new FileResponse("File deleted"));
 	}
 
 	@Operation(summary = "파일/폴더 이름 변경 및 이동", description = "파일/폴더의 이름을 변경하거나 위치를 변경합니다.")
-	@PatchMapping("/{filePath:.+}")
+	@PatchMapping
 	@PreAuthorize("@projectSecurityService.hasWritePermission(#projectId)")
 	public ApiResponse<FileResponse> moveFile(
 		@PathVariable Long projectId,
-		@RequestBody MoveFileRequest request,
+		@RequestParam String fromPath,
+		@RequestParam String toPath,
 		@AuthenticationPrincipal UserPrincipal user
 	) {
-		fileService.moveFileorDirectory(projectId, request, user.getUserId());
-		return ApiResponse.ok(new FileResponse("파일이 이동되었습니다."));
+		fileService.moveFileorDirectory(projectId, fromPath, toPath, user.getUserId());
+		log.info("[FILE MOVE] Parameters: {}, {}, {}, {}", projectId, fromPath, toPath, user.getUserId());
+		return ApiResponse.ok(new FileResponse("File moved"));
 	}
 
 	/**
@@ -136,7 +140,7 @@ public class FileController {
 		@AuthenticationPrincipal UserPrincipal user) {
 		try {
 			fileService.saveFile(projectId, requestDto.getPath(), requestDto.getContent(), user.getUserId());
-			return ResponseEntity.ok(ApiResponse.ok(Map.of("message", "저장되었습니다.")));
+			return ResponseEntity.ok(ApiResponse.ok(Map.of("message", "File saved")));
 		} catch (CustomException e) {
 			HttpStatus status = switch (e.getErrorCode()) {
 				case NO_WRITE_PERMISSION, NOT_A_MEMBER -> HttpStatus.FORBIDDEN;

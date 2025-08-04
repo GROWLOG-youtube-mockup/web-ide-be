@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import com.growlog.webide.domain.files.dto.CreateFileRequest;
 import com.growlog.webide.domain.files.dto.FileOpenResponseDto;
 import com.growlog.webide.domain.files.dto.FileSearchResponseDto;
-import com.growlog.webide.domain.files.dto.MoveFileRequest;
 import com.growlog.webide.domain.files.dto.tree.TreeAddEventDto;
 import com.growlog.webide.domain.files.dto.tree.TreeMoveEventDto;
 import com.growlog.webide.domain.files.dto.tree.TreeRemoveEventDto;
@@ -73,7 +72,7 @@ public class FileService {
 		} catch (CustomException ce) {
 			throw ce;
 		} catch (Exception e) {
-			log.error("컨테이너 내부 파일 생성 실패", e);
+			log.error("Failed to create file in container.", e);
 			throw new CustomException(ErrorCode.FILE_OPERATION_FAILED);
 		}
 
@@ -111,7 +110,7 @@ public class FileService {
 		} catch (CustomException ce) {
 			throw ce;
 		} catch (Exception e) {
-			log.error("컨테이너 내부 파일/디렉토리 삭제 실패", e);
+			log.error("Failed to delete file or directory in container.", e);
 			throw new CustomException(ErrorCode.FILE_OPERATION_FAILED);
 		}
 
@@ -132,7 +131,7 @@ public class FileService {
 
 	}
 
-	public void moveFileorDirectory(Long projectId, MoveFileRequest request, Long userId) {
+	public void moveFileorDirectory(Long projectId, String fromPath, String toPath, Long userId) {
 		ActiveInstance inst = activeInstanceRepository.findByUser_UserIdAndProject_Id(userId, projectId)
 			.orElseThrow(() -> new CustomException(ErrorCode.ACTIVE_CONTAINER_NOT_FOUND));
 
@@ -140,12 +139,8 @@ public class FileService {
 
 		String cid = inst.getContainerId();
 
-		String from = request.getFromPath().startsWith("/")
-			? request.getFromPath().substring(1)
-			: request.getFromPath();
-		String to = request.getToPath().startsWith("/")
-			? request.getToPath().substring(1)
-			: request.getToPath();
+		String from = fromPath.startsWith("/") ? fromPath.substring(1) : fromPath;
+		String to = toPath.startsWith("/") ? toPath.substring(1) : toPath;
 
 		String fullFrom = CONTAINER_BASE + "/" + from;
 		String fullTo = CONTAINER_BASE + "/" + to;
@@ -166,19 +161,20 @@ public class FileService {
 		} catch (CustomException ce) {
 			throw ce;
 		} catch (Exception e) {
-			log.error("컨테이너 내부 파일/디렉토리 이동 실패", e);
+			log.error("Failed move file or directory in container.", e);
 			throw new CustomException(ErrorCode.FILE_OPERATION_FAILED);
 		}
 
-		FileMeta meta = fileMetaRepository.findByProjectIdAndPath(projectId, request.getFromPath())
+		FileMeta meta = fileMetaRepository.findByProjectIdAndPath(projectId, fromPath)
 			.orElseThrow(() -> new CustomException(ErrorCode.FILE_NOT_FOUND));
 
-		meta.updatePath(request.getToPath());
+		meta.updatePath(toPath);
+		fileMetaRepository.save(meta);
 
 		// ✅ WebSocket 이벤트 푸시
 		WebSocketMessage msg = new WebSocketMessage(
 			"tree:move",
-			new TreeMoveEventDto(meta.getId(), request.getFromPath(), request.getToPath())
+			new TreeMoveEventDto(meta.getId(), fromPath, toPath)
 		);
 		messagingTemplate.convertAndSend(
 			"/topic/projects/" + projectId + "/tree",
@@ -215,7 +211,7 @@ public class FileService {
 		String containerId = instance.getContainerId();
 
 		// 👉 로그 추가 (디버깅용)
-		log.info("📂 파일 열기 - containerId: {}, path: {}", containerId, relativePath);
+		log.info("📂 Open file - containerId: {}, path: {}", containerId, relativePath);
 
 		String fileContent = dockerCommandService.readFileContent(containerId, relativePath);
 
@@ -234,7 +230,7 @@ public class FileService {
 		String containerId = instance.getContainerId();
 		dockerCommandService.writeFileContent(containerId, relativePath, content);
 
-		log.info("✅ 파일 저장 완료 - containerId: {}, path: {}", containerId, relativePath);
+		log.info("✅ File saved successfully. - containerId: {}, path: {}", containerId, relativePath);
 	}
 
 	public List<FileSearchResponseDto> searchFilesByName(Long projectId, String query) {

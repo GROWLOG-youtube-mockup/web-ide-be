@@ -16,7 +16,9 @@ import com.growlog.webide.domain.users.entity.Users;
 import com.growlog.webide.domain.users.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @RequiredArgsConstructor
 @Service
 public class ChatService {
@@ -27,10 +29,12 @@ public class ChatService {
 	private final ProjectRepository projectRepository;
 
 	@Transactional(readOnly = true)
-	public ChattingResponseDto enter(Long projectId, String username) {
-		String enterMessage = username + "님이 입장했습니다.";
+	public ChattingResponseDto enter(Long projectId, Long userId, String username, String profileImageUrl) {
+		String enterMessage = username + " joined.";
 
-		return new ChattingResponseDto(ChatType.ENTER, projectId, username, enterMessage);
+		log.info("{} Entering project {}", username, projectId);
+		return new ChattingResponseDto(ChatType.ENTER, projectId, userId, username, profileImageUrl, enterMessage);
+
 	}
 
 	@Transactional
@@ -43,15 +47,17 @@ public class ChatService {
 
 		chatRepository.save(chat);
 
-		return new ChattingResponseDto(ChatType.TALK, projectId, username, content, codeLink);
+		log.info("{} Talking Project {}", username, projectId);
+		return new ChattingResponseDto(ChatType.TALK, projectId, userId, username, null, content, codeLink);
 	}
 
 	@Transactional(readOnly = true)
 	public ChattingResponseDto leave(Long projectId, Long userId) {
 		Users userRef = userRepository.getReferenceById(userId);
 		String username = userRef.getName();
-		String leaveMessage = username + "님이 퇴장했습니다.";
+		String leaveMessage = username + " left.";
 
-		return new ChattingResponseDto(ChatType.LEAVE, projectId, username, leaveMessage);
+		log.info("{} Leaving Project {}", username, projectId);
+		return new ChattingResponseDto(ChatType.LEAVE, projectId, userId, username, null, leaveMessage);
 	}
 }
